@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Data & outputs (too large / generated at runtime)
+data/
+runs/
+jobs/
+
+# COLMAP / OpenMVS runtime logs
+*.log
+
+# SQLite WAL artifacts
+*.db-shm
+*.db-wal
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Claude Code memory
+.claude/

@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "photogrammetry-engine"
+version = "0.1.0"
+description = "Orchestration pipeline that turns overlapping photos into a textured 3D model using COLMAP + OpenMVS."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "shuvham" }]
+dependencies = [
+    "typer>=0.12",
+    "pydantic>=2.6",
+    "rich>=13.7",
+    "pillow>=10.0",
+    "numpy>=1.26",
+    "trimesh>=4.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# Heavier / harder-to-install extras. The engine degrades gracefully without them.
+full = [
+    "pycolmap>=0.6",
+    "open3d>=0.18",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+]
+
+[project.scripts]
+engine = "engine.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: end-to-end test that requires colmap/OpenMVS binaries (skipped if absent)",
+]
