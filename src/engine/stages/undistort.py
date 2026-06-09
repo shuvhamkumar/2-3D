@@ -39,9 +39,15 @@ class UndistortStage(Stage):
         sparse_model = Path(self.prior_outputs(ctx, "sfm")["sparse_model"])
         ws.dense_dir.mkdir(parents=True, exist_ok=True)
 
+        # Use the image path that ingest actually validated images against.
+        # On a resumed run the caller may supply a different (parent) directory;
+        # ingest's recorded image_dir is always the correct COLMAP image root.
+        ingest_image_dir = self.prior_metrics(ctx, "ingest").get("image_dir")
+        image_path = Path(ingest_image_dir) if ingest_image_dir else ws.image_dir
+
         cmd = [
             colmap, "image_undistorter",
-            "--image_path", str(ws.image_dir),
+            "--image_path", str(image_path),
             "--input_path", str(sparse_model),
             "--output_path", str(ws.dense_dir),
             "--output_type", "COLMAP",
