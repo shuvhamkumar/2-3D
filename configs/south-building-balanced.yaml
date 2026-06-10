@@ -1,8 +1,29 @@
 preset: balanced
 use_case: outdoor
 
+mvs:
+  # This OpenMVS TextureMesh build is unstable on 2000px undistorted images
+  # (non-deterministic SIGSEGV/OOM). 1000px is the source scale the original
+  # draft run textured reliably; dense point count is ~unchanged at this scale.
+  max_image_size: 1000
+
 matching:
   strategy: spatial
+
+mesh:
+  # This machine's OpenMVS ReconstructMesh emits only the mesh .ply, not the
+  # .mvs scene RefineMesh requires — so refine must stay off here.
+  refine: false
+  # Cap the mesh at 1.5M faces: TextureMesh OOMs (23GB RAM) on the uncapped
+  # ~4.3M-face mesh with 2000px source images. Dense reconstruction is unaffected.
+  target_face_num: 1500000
+
+texture:
+  # TextureMesh SIGSEGVs on this 4.2M-face mesh with a 4096 atlas (memory in
+  # atlas packing) regardless of resolution_level. 2048 is the texture config
+  # the draft run proved on this OpenMVS build.
+  resolution_level: 2
+  texture_size: 2048
 
 export:
   outlier_std_ratio: 1.5

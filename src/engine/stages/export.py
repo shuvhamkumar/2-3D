@@ -15,7 +15,7 @@ from typing import Any
 
 from ..config import UseCase
 from ..logging import get_logger
-from .. import meshops
+from .. import geometry, meshops
 from .base import Stage, StageContext, StageError
 
 
@@ -93,6 +93,34 @@ class ExportStage(Stage):
             if texture_dropped:
                 warnings.append("Decimation dropped the UV texture (vertex colors retained).")
 
+        # 3b) reorient to glTF +Y. COLMAP's gauge is arbitrary and y-down, so the
+        # mesh otherwise appears upside-down; estimate the up axis from the camera
+        # poses and rotate. Best-effort — never fail the export over orientation.
+        reoriented_up = None
+        colmap_tool = ctx.env.tools.get("colmap")
+        if ecfg.reorient_up and colmap_tool and colmap_tool.available \
+                and ws.metrics_file("sfm").exists():
+            sparse_model = self.prior_outputs(ctx, "sfm").get("sparse_model")
+            if sparse_model and Path(sparse_model).exists():
+                try:
+                    up = geometry.estimate_scene_up(
+                        colmap_tool.path, Path(sparse_model), ctx.env
+                    )
+                    if up is not None:
+                        meshops.reorient_to_up(mesh, up)
+                        reoriented_up = [round(float(x), 4) for x in up]
+                        logger.info("Reoriented mesh: scene up %s -> +Y (glTF).", reoriented_up)
+                    else:
+                        warnings.append("Up-axis reorientation skipped: could not estimate up.")
+                except Exception as exc:  # noqa: BLE001 -- orientation is non-critical
+                    warnings.append(f"Up-axis reorientation skipped: {exc}")
+
+        # 3c) normalize the PBR material so the baked albedo texture renders at
+        # full brightness (trimesh's OBJ->GLB leaves a dark baseColorFactor +
+        # metallic=1, which makes the model look dim/black in PBR viewers).
+        if meshops.normalize_pbr_material(mesh):
+            logger.info("Normalized PBR material: baseColor=white, metallic=0, roughness=1.")
+
         # 4) convert + copy to output/.
         ws.output_dir.mkdir(parents=True, exist_ok=True)
         glb_path = ws.output_dir / "model.glb"
@@ -105,6 +133,7 @@ class ExportStage(Stage):
             "use_case": ctx.config.use_case.value,
             "source_mesh": src.name,
             "has_uv_texture": has_uv and not texture_dropped,
+            "reoriented_up": reoriented_up,
             "files": {
                 "glb": {"path": glb_path.name, "bytes": glb_size},
                 "ply": {"path": ply_path.name, "bytes": ply_size},
@@ -146,6 +175,7 @@ class ExportStage(Stage):
             "edge_manifold": quality.edge_manifold,
             "vertex_manifold": quality.vertex_manifold,
             "decimated_to_faces": decimated_to,
+            "reoriented_up": reoriented_up,
             "glb_path": str(glb_path),
             "glb_bytes": glb_size,
             "ply_path": str(ply_path),

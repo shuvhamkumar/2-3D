@@ -119,8 +119,18 @@ class MeshStage(Stage):
         envx = openmvs_lib_env(ctx.env)
         reconstruct = ctx.env.tools["ReconstructMesh"].path
 
-        run_command([reconstruct, "scene_dense.mvs"],
-                    cwd=ws.dense_dir, env_required=ctx.env, extra_env=envx)
+        mcfg = ctx.config.mesh
+        rcmd = [reconstruct, "scene_dense.mvs"]
+        if mcfg.target_face_num > 0:
+            rcmd += ["--target-face-num", str(mcfg.target_face_num)]
+        # Thin-structure controls: low --smooth + low --remove-spurious preserve
+        # slender geometry (e.g. columns); --free-space-support recovers weak
+        # (low-texture/few-view) surfaces. See MeshConfig for the trade-offs.
+        rcmd += ["--smooth", str(mcfg.smooth),
+                 "--remove-spurious", str(mcfg.remove_spurious)]
+        if mcfg.free_space_support:
+            rcmd += ["--free-space-support", "1"]
+        run_command(rcmd, cwd=ws.dense_dir, env_required=ctx.env, extra_env=envx)
         mesh_mvs = ws.dense_dir / "scene_dense_mesh.mvs"
         mesh_ply = ws.dense_dir / "scene_dense_mesh.ply"
         warnings: list[str] = []

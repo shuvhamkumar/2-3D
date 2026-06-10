@@ -160,6 +160,71 @@ def decimate(mesh: trimesh.Trimesh, target_faces: int) -> tuple[trimesh.Trimesh,
     return out, textured
 
 
+def reorient_to_up(
+    mesh: trimesh.Trimesh, up, target_up=(0.0, 1.0, 0.0)
+) -> np.ndarray:
+    """Rotate ``mesh`` in place so direction ``up`` aligns with ``target_up``.
+
+    A pure rotation (preserves scale and handedness, so no mirroring). Default
+    target is glTF +Y. Returns the 4x4 transform applied (identity if already
+    aligned or the inputs are degenerate). UVs / vertex colors are unaffected.
+    """
+    a = np.asarray(up, dtype=float)
+    b = np.asarray(target_up, dtype=float)
+    na, nb = np.linalg.norm(a), np.linalg.norm(b)
+    if na < 1e-9 or nb < 1e-9:
+        return np.eye(4)
+    a, b = a / na, b / nb
+    v = np.cross(a, b)
+    c = float(np.dot(a, b))
+    s = float(np.linalg.norm(v))
+    if s < 1e-9:
+        if c > 0:
+            return np.eye(4)  # already aligned
+        # antiparallel: 180° about any axis perpendicular to a (R = 2·aa^T − I form,
+        # built from a perpendicular axis).
+        perp = (1.0, 0.0, 0.0) if abs(a[0]) < 0.9 else (0.0, 1.0, 0.0)
+        axis = np.cross(a, np.asarray(perp))
+        axis /= np.linalg.norm(axis)
+        R = 2 * np.outer(axis, axis) - np.eye(3)
+    else:
+        vx = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
+        R = np.eye(3) + vx + vx @ vx * ((1 - c) / (s * s))
+    T = np.eye(4)
+    T[:3, :3] = R
+    mesh.apply_transform(T)
+    return T
+
+
+def normalize_pbr_material(mesh: trimesh.Trimesh, double_sided: bool = True) -> bool:
+    """Make a UV-textured mesh render as flat diffuse albedo in glTF/PBR viewers.
+
+    Photogrammetry textures are baked albedo, but trimesh's OBJ->GLB conversion
+    leaves the MTL's diffuse ``Kd`` in ``baseColorFactor`` (a dark gray multiplier)
+    and no ``metallicFactor`` (glTF defaults it to 1.0 = fully metallic). Together
+    these multiply the texture down and make the model look dim/black in PBR
+    viewers (F3D, three.js, ...). Force baseColorFactor=white, metallic=0,
+    roughness=1, and double-sided so inconsistently-wound faces aren't culled to
+    black. Returns ``False`` (no-op) for non-textured meshes (e.g. vertex-color).
+    """
+    from trimesh.visual import TextureVisuals
+    from trimesh.visual.material import PBRMaterial
+
+    vis = getattr(mesh, "visual", None)
+    if not isinstance(vis, TextureVisuals) or vis.material is None:
+        return False
+    mat = vis.material
+    tex = getattr(mat, "baseColorTexture", None) or getattr(mat, "image", None)
+    vis.material = PBRMaterial(
+        baseColorTexture=tex,
+        baseColorFactor=[255, 255, 255, 255],
+        metallicFactor=0.0,
+        roughnessFactor=1.0,
+        doubleSided=double_sided,
+    )
+    return True
+
+
 def export(mesh: trimesh.Trimesh, path: Path) -> int:
     """Export to the format implied by ``path`` extension; return bytes written."""
     path.parent.mkdir(parents=True, exist_ok=True)

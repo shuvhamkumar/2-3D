@@ -135,6 +135,22 @@ class MeshConfig(BaseModel):
     backend: MeshBackend = MeshBackend.OPENMVS
     # OpenMVS RefineMesh -- expensive; off for draft.
     refine: bool = False
+    # OpenMVS ReconstructMesh --target-face-num (0 = no cap). Caps the mesh face
+    # count so downstream TextureMesh fits in RAM on memory-limited machines; the
+    # dense reconstruction is unaffected, only the surface tessellation is coarser.
+    target_face_num: int = Field(0, ge=0)
+    # OpenMVS ReconstructMesh --smooth: Laplacian smoothing iterations (OpenMVS
+    # default 2). Each iteration shrinks thin protrusions, so slender structures
+    # (columns, railings, signage) erode; lower it (0-1) to preserve them.
+    smooth: int = Field(2, ge=0)
+    # OpenMVS ReconstructMesh --remove-spurious: removes faces with over-long
+    # edges or isolated components (OpenMVS default 20; 0 = disabled). High values
+    # clean vegetation/background spikes but also delete fragmented thin features.
+    remove_spurious: float = Field(20.0, ge=0)
+    # OpenMVS ReconstructMesh --free-space-support: reconstruct weakly-represented
+    # (low-texture / few-view) surfaces such as white columns. Off by default; on
+    # also recovers more background noise, so pair with masking/cropping.
+    free_space_support: bool = False
     # COLMAP poisson depth (higher = finer, slower).
     poisson_depth: int = Field(11, ge=5, le=14)
     # COLMAP poisson trim: higher = trims more low-density (extrapolated) area.
@@ -176,6 +192,10 @@ class ExportConfig(BaseModel):
     format: OutputFormat = OutputFormat.GLB
     # Optional decimation target (number of faces). None = no decimation.
     target_faces: int | None = None
+    # Rotate the export so the scene's (camera-estimated) up axis maps to glTF
+    # +Y. COLMAP's gauge is arbitrary and y-down, so models otherwise appear
+    # upside-down in glTF/GLB viewers. Skipped if the up axis can't be estimated.
+    reorient_up: bool = True
     # Mesh cleanup (export stage): keep largest connected component and strip
     # statistical outliers. Reported honestly; meshes are never auto-repaired.
     keep_largest_component: bool = True

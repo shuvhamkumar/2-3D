@@ -58,6 +58,63 @@ def export_sparse_points(
     return out_ply
 
 
+def estimate_scene_up(colmap_path: str, sparse_model_dir: Path, env: Environment):
+    """Estimate the scene's up direction (unit vector, reconstruction world frame).
+
+    COLMAP reconstructs in an arbitrary gauge with no notion of gravity, and its
+    camera frame is y-down — so a mesh exported straight to glTF (which is y-up)
+    appears upside-down. Hand-held / turntable captures keep the camera roughly
+    level, so averaging each camera's world-space up axis recovers true vertical.
+
+    Reads poses via ``colmap model_converter --output_type TXT`` (no pycolmap
+    dependency). Returns ``None`` if the model can't be read / has no poses.
+    """
+    import tempfile
+
+    import numpy as np
+
+    with tempfile.TemporaryDirectory() as td:
+        run_command(
+            [colmap_path, "model_converter",
+             "--input_path", str(sparse_model_dir),
+             "--output_path", td, "--output_type", "TXT"],
+            env_required=env,
+        )
+        images_txt = Path(td) / "images.txt"
+        if not images_txt.exists():
+            return None
+        # images.txt: header comments, then exactly two lines per image (the
+        # pose line, then a POINTS2D line that may be blank). Poses are therefore
+        # every other non-comment line.
+        body = [
+            ln for ln in images_txt.read_text(encoding="utf-8").splitlines()
+            if not ln.lstrip().startswith("#")
+        ]
+
+    ups = []
+    for line in body[0::2]:
+        p = line.split()
+        if len(p) < 10:
+            continue
+        try:
+            qw, qx, qy, qz = float(p[1]), float(p[2]), float(p[3]), float(p[4])
+        except ValueError:
+            continue
+        # quaternion (w,x,y,z) -> world->camera rotation R; world up for this
+        # camera is R^T applied to image-up (-Y, since the camera frame is y-down).
+        R = np.array([
+            [1 - 2 * (qy * qy + qz * qz), 2 * (qx * qy - qz * qw),     2 * (qx * qz + qy * qw)],
+            [2 * (qx * qy + qz * qw),     1 - 2 * (qx * qx + qz * qz), 2 * (qy * qz - qx * qw)],
+            [2 * (qx * qz - qy * qw),     2 * (qy * qz + qx * qw),     1 - 2 * (qx * qx + qy * qy)],
+        ])
+        ups.append(R.T @ np.array([0.0, -1.0, 0.0]))
+    if not ups:
+        return None
+    up = np.asarray(ups).mean(axis=0)
+    norm = float(np.linalg.norm(up))
+    return up / norm if norm > 1e-9 else None
+
+
 def compute_obb(points_ply: Path, margin: float):
     """Oriented bounding box of the sparse points, expanded by ``margin`` per side."""
     import open3d as o3d

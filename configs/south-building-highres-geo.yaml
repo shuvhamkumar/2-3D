@@ -1,0 +1,23 @@
+# Geometry-first experiment: recover pillar/structure fidelity that the
+# texture-stability workaround (max_image_size 1000 + resolution_level 1 =>
+# ~500px depth maps) was throttling. Runs undistort->dense->mesh only; texture
+# is deliberately left for a second step once the geometry is validated.
+preset: balanced
+use_case: outdoor
+
+matching:
+  strategy: spatial
+
+mvs:
+  # 2000px undistort (balanced preset's intent). resolution_level 1 = 1000px
+  # depth maps: 2x the original 500px (fixes thin pillars) but a far smaller,
+  # reliably-meshable cloud than level 0's 12.4M points (which made ReconstructMesh
+  # graph-cut run >4h). level 0 result preserved at /tmp/sb_dense_12M.ply.
+  max_image_size: 2000
+  resolution_level: 1
+
+mesh:
+  refine: false
+  # Keep the 1.5M-face cap: it bounds TextureMesh memory for the later texture
+  # step, and 1.5M faces sit on a far more accurate surface at this resolution.
+  target_face_num: 1500000

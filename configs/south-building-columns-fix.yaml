@@ -1,0 +1,35 @@
+# Entrance-column fix. The thin white columns were being destroyed by the mesher
+# (OpenMVS defaults smooth=2 + remove-spurious=20 erode/delete slender geometry),
+# NOT by lack of dense-cloud density (cross-section test: old 3.5M, new 3.4M, and
+# 12.4M dense all give the same thin-walled shape). So we keep the texture-safe
+# 1000px geometry and instead tune the mesher to preserve thin structures.
+preset: balanced
+use_case: outdoor
+
+matching:
+  strategy: spatial
+
+mvs:
+  # 1000px = the proven texture-safe source size (2000px SIGSEGVs TextureMesh on
+  # this build). Density is not the lever for the columns, so no need to go higher.
+  max_image_size: 1000
+
+mesh:
+  refine: false
+  # Cap faces so TextureMesh fits 23GB RAM (same as the working balanced run).
+  target_face_num: 1500000
+  # Thin-structure preservation:
+  smooth: 1               # was 2 -> less Laplacian shrinking of slender columns
+  remove_spurious: 20     # keep moderate: still strips long-edge vegetation spikes
+  free_space_support: false  # OFF: on an outdoor/vegetated scene it hallucinates
+                             # spiky noise off every surface (net worse than columns gained)
+
+texture:
+  resolution_level: 2
+  texture_size: 2048
+
+export:
+  # Aggressive cleanup to drop disconnected vegetation/background fragments.
+  outlier_std_ratio: 1.5
+  outlier_max_fraction: 0.05
+  min_component_fraction: 0.01
